@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>슈퍼 코인 러너</title>
+  <style>
+    /* ── 기본 레이아웃 ── */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a0a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+    }
+
+    /* ── HUD (점수판) ── */
+    #hud {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+    #hud span {
+      background: #000;
+      border: 2px solid #f9c;
+      border-radius: 8px;
+      padding: 4px 14px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: bold;
+      text-shadow: 1px 1px #a00;
+    }
+    #hud span b { color: #ff0; }
+
+    /* ── 캔버스 ── */
+    #gameCanvas {
+      display: block;
+      border: 4px solid #f9c;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    /* ── 모드 버튼 ── */
+    #modeToggle {
+      margin-top: 8px;
+      padding: 8px 20px;
+      font-size: 14px;
+      font-family: 'Courier New', monospace;
+      background: #222;
+      border: 2px solid #f9c;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+    }
+    #modeToggle:hover { background: #444; }
+
+    /* ── 오버레이 (시작/게임오버/상점) ── */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.82);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      z-index: 20;
+    }
+    .overlay h1 { font-size: 38px; color: #f9c; text-shadow: 3px 3px #800; margin-bottom: 6px; }
+    .overlay h2 { font-size: 26px; color: #ff0; text-shadow: 2px 2px #840; margin-bottom: 16px; }
+    .overlay p  { font-size: 13px; color: #bbb; margin-bottom: 5px; }
+
+    /* ── 버튼 공통 ── */
+    .btn {
+      margin: 6px;
+      padding: 10px 26px;
+      font-size: 15px;
+      font-family: 'Courier New', monospace;
+      background: linear-gradient(180deg, #c33, #811);
+      border: 3px solid #f9c;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .btn:hover { transform: scale(1.06); }
+    .btn.blue { background: linear-gradient(180deg, #48f, #06a); border-color: #9cf; }
+    .btn.green { background: linear-gradient(180deg, #4c4, #181); border-color: #9f9; }
+    .btn.sel { background: linear-gradient(180deg, #f80, #a40); border-color: #ff0; }
+
+    /* ── 캐릭터 선택 ── */
+    .char-grid { display: flex; gap: 12px; margin: 12px 0; }
+    .char-card {
+      border: 3px solid #555;
+      border-radius: 10px;
+      padding: 10px 14px;
+      text-align: center;
+      background: rgba(255,255,255,0.07);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .char-card:hover { border-color: #f9c; }
+    .char-card.on { border-color: #ff0; background: rgba(255,255,0,0.1); }
+    .char-card canvas { display: block; margin: 0 auto 5px; }
+    .char-card p { font-size: 12px; color: #eee; }
+
+    /* ── 상점 ── */
+    .shop-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      max-width: 580px;
+      margin: 12px 0;
+    }
+    .shop-card {
+      border: 3px solid #555;
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+      background: rgba(255,255,255,0.07);
+      cursor: pointer;
+      width: 120px;
+      transition: all 0.12s;
+    }
+    .shop-card:hover { border-color: #ff0; }
+    .shop-card.owned  { border-color: #4f4; background: rgba(0,200,0,0.08); }
+    .shop-card.active { border-color: #4af; background: rgba(0,180,255,0.12); }
+    .shop-card canvas { display: block; margin: 0 auto 5px; }
+    .shop-card p { font-size: 12px; color: #eee; }
+    .shop-card .price { font-size: 11px; color: #ff0; }
+  </style>
+</head>
+<body>
+
+<!-- HUD -->
+<div id="hud">
+  <span>점수: <b id="sScore">0</b></span>
+  <span>코인: <b id="sCoin">0</b></span>
+  <span>총코인: <b id="sTotal">0</b></span>
+  <span>최고: <b id="sHigh">0</b></span>
+</div>
+
+<!-- 게임 캔버스 -->
+<div style="position:relative;">
+  <canvas id="gameCanvas" width="800" height="300"></canvas>
+
+  <!-- 시작 화면 -->
+  <div class="overlay" id="oStart">
+    <h1>⭐ 슈퍼 코인 러너</h1>
+    <p>캐릭터를 고르세요</p>
+    <div class="char-grid" id="charGrid"></div>
+    <div style="display:flex;gap:10px;margin-top:8px;">
+      <button class="btn blue" id="btnManual" onclick="pickMode('manual')">🎮 직접 플레이</button>
+      <button class="btn sel"  id="btnAuto"   onclick="pickMode('auto')">🤖 자동 에이전트</button>
+    </div>
+    <button class="btn green" style="margin-top:12px;font-size:17px;" onclick="startGame()">▶ 시작!</button>
+    <p style="margin-top:8px;font-size:11px;color:#888;">수동: 스페이스 / 위 방향키 / 클릭 · 터치</p>
+  </div>
+
+  <!-- 게임 오버 화면 -->
+  <div class="overlay" id="oOver" style="display:none;">
+    <h2>💀 게임 오버!</h2>
+    <p id="overScore"></p>
+    <p id="overHigh" style="color:#ff0;font-size:15px;"></p>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn green" onclick="startGame()">🔄 다시 시작</button>
+      <button class="btn blue"  onclick="openShop()">🛍 상점</button>
+      <button class="btn"       onclick="goMain()">🏠 처음으로</button>
+    </div>
+  </div>
+
+  <!-- 상점 화면 -->
+  <div class="overlay" id="oShop" style="display:none;">
+    <h2>🛍 의상 상점</h2>
+    <p id="shopInfo" style="color:#ff0;font-size:15px;margin-bottom:6px;"></p>
+    <div class="shop-grid" id="shopGrid"></div>
+    <button class="btn" onclick="closeShop()">← 돌아가기</button>
+  </div>
+</div>
+
+<!-- 모드 전환 버튼 (게임 중) -->
+<button id="modeToggle" onclick="toggleMode()">🤖 자동 모드 ON</button>
+
+<script>
+// ══════════════════════════════════════════════
+//  캔버스 & 컨텍스트
+// ══════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+
+const W = canvas.width;
+const H = canvas.height;
+const GROUND_Y = 220; // 바닥 y 좌표
+
+// ══════════════════════════════════════════════
+//  게임 상태 변수
+// ══════════════════════════════════════════════
+let gameRunning = false;
+let score       = 0;
+let totalCoins  = 0; // 전체 세션 누적 코인
+let sessionCoins = 0; // 현재 게임 코인
+let highScore   = 0;
+let frame       = 0;
+let gameSpeed   = 4;
+let autoMode    = true;
+let charIdx     = 0;   // 선택된 캐릭터 인덱스
+let equippedSkin = 'default';
+let ownedSkins  = ['default'];
+let bgX         = 0;
+
+// ══════════════════════════════════════════════
+//  캐릭터 정의
+// ══════════════════════════════════════════════
+const CHARS = [
+  { name: 'Mario',     hat: '#e03', body: '#e03', pants: '#44f', shoes: '#640', skin: '#fca' },
+  { name: 'Luigi',     hat: '#0b0', body: '#0b0', pants: '#44f', shoes: '#640', skin: '#fca' },
+  { name: 'Peach',     hat: '#f9e', body: '#f9e', pants: '#f9e', shoes: '#f70', skin: '#fca', crown: true },
+  { name: 'Pinocchio', hat: '#4a2', body: '#ba7', pants: '#555', shoes: '#420', skin: '#fca', nose: true },
+];
+
+// ══════════════════════════════════════════════
+//  의상(스킨) 정의
+// ══════════════════════════════════════════════
+const SKINS = [
+  { id: 'default', name: '기본 의상',    price: 0,    over: null },
+  { id: 'fire',    name: '파이어 슈트',  price: 300,  over: { hat:'#fff', body:'#fff', pants:'#f60', shoes:'#e00' } },
+  { id: 'ice',     name: '아이스 슈트',  price: 500,  over: { hat:'#9ef', body:'#9ef', pants:'#37f', shoes:'#07a' } },
+  { id: 'star',    name: '별빛 슈트',    price: 800,  over: { hat:'#ff0', body:'#ff0', pants:'#fa0', shoes:'#a70' } },
+  { id: 'dark',    name: '다크 슈트',    price: 1200, over: { hat:'#222', body:'#333', pants:'#111', shoes:'#444' } },
+  { id: 'rainbow', name: '무지개 슈트',  price: 2000, over: null, rainbow: true },
+];
+
+// ══════════════════════════════════════════════
+//  플레이어 (physics-jump.skill.md 기반)
+// ══════════════════════════════════════════════
+const player = {
+  x: 80,
+  y: GROUND_Y,
+  w: 28,
+  h: 40,
+  velocityY: 0,
+  gravity: 0.7,        // physics-jump 스킬 기본값
+  jumpPower: -13,      // physics-jump 스킬 기본값
+  isOnGround: true,
+  canDoubleJump: false,
+};
+
+// ══════════════════════════════════════════════
+//  장애물 & 동전 배열 (obstacle-coin-system 기반)
+// ══════════════════════════════════════════════
+let obstacles = [];
+let coins     = [];
+let particles = [];
+let platforms = []; // 올라갈 수 있는 ? 블록
+
+// ══════════════════════════════════════════════
+//  점프 함수 (physics-jump.skill.md)
+// ══════════════════════════════════════════════
+function jump() {
+  if (player.isOnGround) {
+    player.velocityY = player.jumpPower;
+    player.isOnGround = false;
+    player.canDoubleJump = true;
+  } else if (player.canDoubleJump) {
+    // 더블 점프
+    player.velocityY = player.jumpPower * 0.85;
+    player.canDoubleJump = false;
+  }
+}
+
+// ══════════════════════════════════════════════
+//  조작 이벤트 (html-css-js-game 스킬)
+// ══════════════════════════════════════════════
+document.addEventListener('keydown', function(e) {
+  if (!gameRunning || autoMode) return;
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    e.preventDefault();
+    jump();
+  }
+});
+canvas.addEventListener('click',      function() { if (!autoMode) jump(); });
+canvas.addEventListener('touchstart', function(e) { e.preventDefault(); if (!autoMode) jump(); }, { passive: false });
+
+// ══════════════════════════════════════════════
+//  AI 에이전트 판단
+// ══════════════════════════════════════════════
+function agentThink() {
+  // 가장 가까운 장애물 찾기
+  let nearest = null;
+  for (const ob of obstacles) {
+    if (ob.x + ob.w > player.x) { nearest = ob; break; }
+  }
+
+  // 가까운 공중 코인 찾기
+  let airCoin = null;
+  for (const c of coins) {
+    if (c.x > player.x && c.x < player.x + 180 && c.y < GROUND_Y - 55) {
+      airCoin = c; break;
+    }
+  }
+
+  // 장애물 피하기
+  if (nearest) {
+    const dist = nearest.x - (player.x + player.w);
+    const timeToReach = Math.max(1, dist / gameSpeed);
+    if (timeToReach < 22 && dist > 0) {
+      jump();
+      return;
+    }
+  }
+
+  // 공중 코인 먹으러 점프
+  if (airCoin && player.isOnGround && airCoin.x - player.x < 130) {
+    jump();
+    return;
+  }
+
+  // 계단 블록 향해 연속 점프 (높이 차이도 고려)
+  for (const pl of platforms) {
+    const dist = pl.x - (player.x + player.w);
+    if (dist > 0 && dist < 180) {
+      // 블록이 현재 발 위치보다 높을수록 적극 점프 (더블점프 포함)
+      if (player.isOnGround || (pl.y < player.y - 30 && player.canDoubleJump)) {
+        jump();
+        break;
+      }
+    }
+  }
+}
+
+// ══════════════════════════════════════════════
+//  플레이어 업데이트 (physics-jump.skill.md)
+// ══════════════════════════════════════════════
+function updatePlayer() {
+  if (autoMode && gameRunning) agentThink();
+
+  // 중력 적용
+  player.velocityY += player.gravity;
+  player.y += player.velocityY;
+
+  // 바닥 처리
+  if (player.y >= GROUND_Y) {
+    player.y = GROUND_Y;
+    player.velocityY = 0;
+    player.isOnGround = true;
+    player.canDoubleJump = false;
+    return;
+  }
+
+  // 플랫폼(? 블록) 위에 착지
+  let onPlatform = false;
+  for (const pl of platforms) {
+    const px2 = player.x + 4;
+    const pw2 = player.w - 8;
+    // 발이 블록 위를 통과하는 순간 착지
+    if (player.velocityY >= 0 &&
+        px2 + pw2 > pl.x + 2 && px2 < pl.x + pl.w - 2 &&
+        player.y >= pl.y && player.y <= pl.y + 12) {
+      player.y = pl.y;
+      player.velocityY = 0;
+      player.isOnGround = true;
+      player.canDoubleJump = false;
+      onPlatform = true;
+      break;
+    }
+    // 머리가 블록 아래에 닿으면 튕김 (마리오 스타일)
+    if (player.velocityY < 0) {
+      const headY = player.y - 68; // 모자 꼭대기 y
+      if (px2 + pw2 > pl.x + 2 && px2 < pl.x + pl.w - 2 &&
+          headY <= pl.y + pl.h && headY >= pl.y - 4) {
+        player.velocityY = 2;
+        // 블록 타격 이펙트
+        addParticles(pl.x + pl.w/2, pl.y, '#fa0', 5);
+        // 블록 위에 코인 스폰
+        coins.push({ x: pl.x + pl.w/2, y: pl.y - 30, r: 9, vy: -4 });
+      }
+    }
+  }
+  if (!onPlatform && player.y < GROUND_Y) {
+    player.isOnGround = false;
+  }
+}
+
+// ══════════════════════════════════════════════
+//  장애물 생성 & 업데이트 (obstacle-coin-system)
+// ══════════════════════════════════════════════
+const OB_TYPES = ['pipe', 'goomba', 'rock'];
+
+function spawnObstacle() {
+  const type = OB_TYPES[Math.floor(Math.random() * OB_TYPES.length)];
+  let w, h;
+  if (type === 'pipe')   { w = 32; h = 48 + Math.random() * 36; }
+  else if (type === 'goomba') { w = 32; h = 32; }
+  else                   { w = 30; h = 30; }
+
+  obstacles.push({
+    x: W + 10,
+    y: GROUND_Y - h + 8,  // 바닥에 붙게
+    w, h, type
+  });
+}
+
+function updateObstacles() {
+  // 난이도: 시간이 지날수록 조금씩 빨라짐
+  gameSpeed += 0.001;
+
+  const interval = Math.max(55, 110 - Math.floor(score / 30) * 3);
+  if (frame % interval === 0) spawnObstacle();
+
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    obstacles[i].x -= gameSpeed;
+    if (obstacles[i].x + obstacles[i].w < 0) obstacles.splice(i, 1);
+  }
+}
+
+// ── 플랫폼(? 블록) 생성 & 업데이트 ──────────────
+// 계단 형식: 블록이 오른쪽에서 왼쪽으로 갈수록 위로 올라감
+function spawnStairs() {
+  const steps = 3 + Math.floor(Math.random() * 3); // 3~5칸 계단
+  const startX = W + 20;
+  const startY = GROUND_Y - 75;          // 첫 계단 높이
+  const stepX  = 60;                     // 가로 간격 (점프 가능 거리)
+  const stepY  = 48;                     // 한 계단당 올라가는 높이
+
+  for (let k = 0; k < steps; k++) {
+    const bx = startX + k * stepX;
+    const by = startY - k * stepY;       // 올라갈수록 y가 작아짐(위로)
+
+    // 너무 위로 올라가면 스폰 안 함 (화면 밖)
+    if (by < 20) break;
+
+    // 블록 1~2개씩
+    const width = Math.random() < 0.4 ? 2 : 1;
+    for (let m = 0; m < width; m++) {
+      platforms.push({ x: bx + m * 34, y: by, w: 30, h: 30 });
+    }
+    // 블록 위에 코인
+    coins.push({ x: bx + 15, y: by - 22, r: 9, vy: 0 });
+  }
+}
+
+function updatePlatforms() {
+  if (frame % 200 === 80) spawnStairs();
+
+  for (let i = platforms.length - 1; i >= 0; i--) {
+    platforms[i].x -= gameSpeed;
+    if (platforms[i].x + platforms[i].w < 0) platforms.splice(i, 1);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  동전 생성 & 업데이트
+// ══════════════════════════════════════════════
+function spawnCoin() {
+  const x = W + 10;
+  // 바닥 코인 or 공중 코인
+  const y = Math.random() < 0.5
+    ? GROUND_Y - 20
+    : GROUND_Y - 60 - Math.random() * 60;
+  coins.push({ x, y, r: 9 });
+}
+
+function updateCoins() {
+  if (frame % 80 === 0) spawnCoin();
+
+  for (let i = coins.length - 1; i >= 0; i--) {
+    const c = coins[i];
+    c.x -= gameSpeed;
+
+    // 블록 머리 충돌로 생긴 코인은 위로 솟구쳤다가 떨어짐
+    if (c.vy !== undefined && c.vy !== 0) {
+      c.vy += 0.4;
+      c.y += c.vy;
+      if (c.vy > 0 && c.y > GROUND_Y - 10) { coins.splice(i, 1); continue; }
+    }
+
+    if (c.x < -20) { coins.splice(i, 1); continue; }
+
+    // 플레이어와 충돌
+    const cx2 = player.x + player.w / 2;
+    const cy2 = player.y - 35; // 캐릭터 중심쯤
+    const dist = Math.hypot(c.x - cx2, c.y - cy2);
+    if (dist < c.r + 18) {
+      sessionCoins++;
+      totalCoins++;
+      score += 10; // 코인 1개 = 10점
+      addParticles(c.x, c.y, '#ff0', 7);
+      coins.splice(i, 1);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════
+//  충돌 판정 (obstacle-coin-system 스킬: rectCollision)
+// ══════════════════════════════════════════════
+function rectCollision(a, b) {
+  return (
+    a.x < b.x + b.w &&
+    a.x + a.w > b.x &&
+    a.y < b.y + b.h &&
+    a.y + a.h > b.y
+  );
+}
+
+function checkObstacleCollision() {
+  // 플레이어 히트박스 (약간 여유)
+  const pb = {
+    x: player.x + 6,
+    y: player.y - player.h + 4,
+    w: player.w - 10,
+    h: player.h - 4,
+  };
+  for (const ob of obstacles) {
+    const obBox = { x: ob.x + 4, y: ob.y, w: ob.w - 8, h: ob.h };
+    if (rectCollision(pb, obBox)) return true;
+  }
+  return false;
+}
+
+// ══════════════════════════════════════════════
+//  파티클 효과
+// ══════════════════════════════════════════════
+function addParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * (1.5 + Math.random() * 3),
+      vy: Math.sin(angle) * (1.5 + Math.random() * 3) - 2,
+      color, life: 28, max: 28
+    });
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  그리기: 색상 계산 (스킨 적용)
+// ══════════════════════════════════════════════
+function getCharColors() {
+  const base = { ...CHARS[charIdx] };
+  const skin = SKINS.find(s => s.id === equippedSkin);
+  if (!skin) return base;
+  if (skin.rainbow) {
+    const h = (frame * 4) % 360;
+    return { ...base, hat: `hsl(${h},100%,55%)`, body: `hsl(${(h+60)%360},100%,55%)`, pants: `hsl(${(h+140)%360},100%,45%)` };
+  }
+  if (skin.over) return { ...base, ...skin.over };
+  return base;
+}
+
+// ══════════════════════════════════════════════
+//  그리기: 캐릭터
+//  px = 캐릭터 중심 x, fy = 발 바닥 y, s = 크기 배율
+// ══════════════════════════════════════════════
+function drawChar(cx2, px, fy, colors, info, s) {
+  // px = 중심 x,  fy = 발 바닥 y,  s = 크기 배율(기본 1)
+  s = s || 1;
+  const hw = 13 * s;   // 몸 반너비
+
+  // ── 레이아웃 (fy 에서 위쪽으로) ──────────────
+  //  신발       : fy-8  ~ fy        (8px)
+  //  바지       : fy-18 ~ fy-8      (10px)
+  //  몸통       : fy-32 ~ fy-18     (14px)
+  //  머리 center: fy-44,  r=11
+  //    머리 범위: fy-55 ~ fy-33
+  //  모자 챙    : fy-57 ~ fy-52     (5px, 머리 바로 위)
+  //  모자 몸통  : fy-68 ~ fy-57     (11px)
+  //  눈         : fy-42             (머리 아래쪽 절반)
+  // ─────────────────────────────────────────────
+
+  // ① 신발
+  cx2.fillStyle = colors.shoes || '#640';
+  cx2.fillRect(px - hw,      fy - 8*s,   hw - 1,   8*s);
+  cx2.fillRect(px + 1,       fy - 8*s,   hw - 1,   8*s);
+
+  // ② 바지
+  cx2.fillStyle = colors.pants || '#44f';
+  cx2.fillRect(px - hw + 2,  fy - 18*s,  hw*2-4,  10*s);
+
+  // ③ 몸통
+  cx2.fillStyle = colors.body || '#e03';
+  cx2.fillRect(px - hw + 2,  fy - 32*s,  hw*2-4,  14*s);
+
+  // ④ 머리(얼굴)
+  cx2.fillStyle = colors.skin || '#fca';
+  cx2.beginPath();
+  cx2.arc(px, fy - 44*s, 11*s, 0, Math.PI * 2);
+  cx2.fill();
+
+  // ⑤ 눈 (머리 그린 직후, 모자 그리기 전)
+  cx2.fillStyle = '#000';
+  cx2.fillRect(px - 6*s, fy - 42*s, 3*s, 3*s);
+  cx2.fillRect(px + 3*s, fy - 42*s, 3*s, 3*s);
+
+  // ⑥ 모자 챙
+  cx2.fillStyle = colors.hat || '#e03';
+  cx2.fillRect(px - hw,      fy - 57*s,  hw*2,     5*s);
+
+  // ⑦ 모자 몸통
+  cx2.fillRect(px - hw + 3,  fy - 68*s,  hw*2-6,  11*s);
+
+  // ⑧ 왕관 (Peach 전용)
+  if (info && info.crown) {
+    cx2.fillStyle = '#ff0';
+    cx2.fillRect(px - 9*s, fy - 71*s, 18*s,  4*s);
+    cx2.fillRect(px - 9*s, fy - 78*s,  3*s,  7*s);
+    cx2.fillRect(px - 2*s, fy - 81*s,  5*s, 10*s);
+    cx2.fillRect(px + 5*s, fy - 78*s,  3*s,  7*s);
+  }
+
+  // ⑨ 코 (Pinocchio 전용)
+  if (info && info.nose) {
+    cx2.fillStyle = '#964';
+    cx2.fillRect(px + 2*s, fy - 43*s, 10*s, 3*s);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  그리기: 배경 (슈퍼마리오 스타일)
+// ══════════════════════════════════════════════
+function drawBackground() {
+  // 하늘
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+  skyGrad.addColorStop(0, '#5cf');
+  skyGrad.addColorStop(1, '#aef');
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, GROUND_Y + 8);
+
+  // 구름
+  drawClouds();
+
+  // 언덕
+  drawHills();
+
+  // ? 블록은 draw()에서 별도 처리
+
+  // 바닥 (초록 잔디 + 벽돌)
+  ctx.fillStyle = '#5a3';
+  ctx.fillRect(0, GROUND_Y + 8, W, H - GROUND_Y - 8);
+  ctx.fillStyle = '#4b2';
+  ctx.fillRect(0, GROUND_Y, W, 12);
+
+  // 벽돌 패턴
+  ctx.fillStyle = '#6c4';
+  const bw = 40;
+  const bOff = (bgX * 0.8) % bw;
+  for (let x = -bw + bOff; x < W + bw; x += bw) {
+    ctx.fillRect(x, GROUND_Y, bw - 2, 10);
+  }
+}
+
+function drawClouds() {
+  // 구름 3개, 시차 스크롤
+  const positions = [60, 260, 500, 720];
+  const heights   = [35, 50, 38, 55];
+  const sizes     = [55, 70, 50, 65];
+  positions.forEach((ox, i) => {
+    const cx2 = ((ox - bgX * 0.12) % (W + 200) + W + 200) % (W + 200) - 100;
+    const cy2 = heights[i];
+    const sz  = sizes[i];
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.beginPath(); ctx.arc(cx2,        cy2,      sz*0.32, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx2+sz*0.28, cy2+5,   sz*0.25, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx2-sz*0.22, cy2+8,   sz*0.20, 0, Math.PI*2); ctx.fill();
+  });
+}
+
+function drawHills() {
+  const hDefs = [{ ox:0, w:200 }, { ox:260, w:160 }, { ox:500, w:220 }, { ox:720, w:180 }];
+  hDefs.forEach(def => {
+    const hx = ((def.ox - bgX * 0.25) % (W + 300) + W + 300) % (W + 300) - 150;
+    ctx.fillStyle = '#3a8';
+    ctx.beginPath();
+    ctx.arc(hx + def.w/2, GROUND_Y + 18, def.w/2, Math.PI, 0);
+    ctx.fill();
+    // 언덕 위 점
+    ctx.fillStyle = '#2c6';
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      ctx.arc(hx + def.w*0.25 + k*def.w*0.25, GROUND_Y - 16, 4, 0, Math.PI*2);
+      ctx.fill();
+    }
+  });
+}
+
+function drawBlocks() {
+  // 실제 플랫폼 배열을 그림
+  platforms.forEach(pl => {
+    ctx.fillStyle = '#fa0';
+    ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+    ctx.strokeRect(pl.x, pl.y, pl.w, pl.h);
+    // ? 문자
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px serif';
+    ctx.fillText('?', pl.x + 8, pl.y + 21);
+    // 테두리 광택
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(pl.x + 2, pl.y + 2, pl.w - 4, 5);
+  });
+}
+
+// ══════════════════════════════════════════════
+//  그리기: 장애물
+// ══════════════════════════════════════════════
+function drawObstacle(ob) {
+  if (ob.type === 'pipe') {
+    // 파이프
+    ctx.fillStyle = '#2a2';
+    ctx.fillRect(ob.x, ob.y + 14, ob.w, ob.h - 14);
+    ctx.fillStyle = '#3c3';
+    ctx.fillRect(ob.x - 4, ob.y, ob.w + 8, 16);
+    ctx.strokeStyle = '#070'; ctx.lineWidth = 2;
+    ctx.strokeRect(ob.x, ob.y + 14, ob.w, ob.h - 14);
+    ctx.strokeRect(ob.x - 4, ob.y, ob.w + 8, 16);
+  } else if (ob.type === 'goomba') {
+    // 굼바
+    const gx = ob.x + ob.w / 2;
+    const gy = ob.y + ob.h;
+    ctx.fillStyle = '#a63';
+    ctx.beginPath(); ctx.arc(gx, gy - 14, 14, 0, Math.PI * 2); ctx.fill();
+    // 눈썹
+    ctx.fillStyle = '#000';
+    ctx.fillRect(gx - 9, gy - 19, 7, 4);
+    ctx.fillRect(gx + 2, gy - 19, 7, 4);
+    // 눈
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(gx - 7, gy - 17, 5, 5);
+    ctx.fillRect(gx + 2, gy - 17, 5, 5);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(gx - 5, gy - 16, 3, 3);
+    ctx.fillRect(gx + 4, gy - 16, 3, 3);
+    // 발
+    ctx.fillStyle = '#640';
+    ctx.fillRect(ob.x, gy - 6, ob.w / 2 - 2, 6);
+    ctx.fillRect(ob.x + ob.w / 2 + 2, gy - 6, ob.w / 2 - 2, 6);
+  } else {
+    // 바위
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.arc(ob.x + ob.w/2, ob.y + ob.h/2, ob.w/2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#aaa';
+    ctx.beginPath();
+    ctx.arc(ob.x + ob.w/2 - 5, ob.y + ob.h/2 - 5, ob.w/4, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+// ══════════════════════════════════════════════
+//  그리기: 동전
+// ══════════════════════════════════════════════
+function drawCoin(c) {
+  const pulse = Math.sin(frame * 0.12 + c.x * 0.05) * 1.5;
+  ctx.fillStyle = '#ff0';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, c.r + pulse * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fa0';
+  ctx.beginPath();
+  ctx.arc(c.x - 2, c.y - 2, c.r * 0.45, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#a60'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, c.r + pulse * 0.3, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+// ══════════════════════════════════════════════
+//  그리기: 파티클
+// ══════════════════════════════════════════════
+function drawParticles() {
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life / p.max;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ══════════════════════════════════════════════
+//  HUD 텍스트 (ui-hud 스킬 기반)
+// ══════════════════════════════════════════════
+function updateHUD() {
+  document.getElementById('sScore').textContent = score;
+  document.getElementById('sCoin').textContent  = sessionCoins;
+  document.getElementById('sTotal').textContent = totalCoins;
+  document.getElementById('sHigh').textContent  = highScore;
+}
+
+// ══════════════════════════════════════════════
+//  메인 업데이트 루프 (html-css-js-game 스킬 순서)
+// ══════════════════════════════════════════════
+function update() {
+  bgX += gameSpeed;
+  frame++;
+  // score는 코인 먹을 때만 올라감 (score++ 제거)
+
+  updatePlayer();
+  updateObstacles();
+  updatePlatforms();
+  updateCoins();
+  updateParticles();
+
+  // 충돌 판정
+  if (checkObstacleCollision()) {
+    endGame();
+    return;
+  }
+
+  updateHUD();
+}
+
+// ══════════════════════════════════════════════
+//  메인 그리기 루프
+// ══════════════════════════════════════════════
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  drawBlocks();         // ? 블록 (배경 위, 캐릭터 아래)
+  obstacles.forEach(drawObstacle);
+  coins.forEach(drawCoin);
+  drawParticles();
+
+  // 플레이어 그리기
+  const colors = getCharColors();
+  const charInfo = CHARS[charIdx];
+  const bobY = player.isOnGround ? Math.sin(frame * 0.22) * 2 : 0;
+  drawChar(ctx, player.x + player.w / 2, player.y + bobY, colors, charInfo, 1);
+}
+
+// ══════════════════════════════════════════════
+//  게임 루프 (requestAnimationFrame)
+// ══════════════════════════════════════════════
+function gameLoop() {
+  if (!gameRunning) return;
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// ══════════════════════════════════════════════
+//  대기 화면 루프 (게임 미실행 시)
+// ══════════════════════════════════════════════
+function idleLoop() {
+  if (gameRunning) return;
+  ctx.clearRect(0, 0, W, H);
+  bgX += 1;
+  drawBackground();
+  // 걷는 모션
+  const bobY = Math.sin(Date.now() * 0.004) * 3;
+  const colors = getCharColors();
+  drawChar(ctx, player.x + player.w / 2, GROUND_Y + bobY, colors, CHARS[charIdx], 1);
+  requestAnimationFrame(idleLoop);
+}
+
+// ══════════════════════════════════════════════
+//  게임 시작 / 종료 / 재시작
+// ══════════════════════════════════════════════
+function startGame() {
+  // 초기화
+  score        = 0;
+  sessionCoins = 0;
+  frame        = 0;
+  gameSpeed    = 4;
+  obstacles    = [];
+  coins        = [];
+  particles    = [];
+  platforms    = [];
+
+  player.x          = 80;
+  player.y          = GROUND_Y;
+  player.velocityY  = 0;
+  player.isOnGround = true;
+  player.canDoubleJump = false;
+
+  document.getElementById('oStart').style.display = 'none';
+  document.getElementById('oOver').style.display  = 'none';
+  document.getElementById('oShop').style.display  = 'none';
+
+  updateModeBtn();
+  updateHUD();
+
+  gameRunning = true;
+  gameLoop();
+}
+
+function endGame() {
+  gameRunning = false;
+  addParticles(player.x + player.w/2, player.y - player.h/2, '#f44', 14);
+
+  if (score > highScore) highScore = score;
+
+  document.getElementById('overScore').textContent =
+    `점수: ${score} | 코인: ${sessionCoins} | 총 코인: ${totalCoins}`;
+  document.getElementById('overHigh').textContent =
+    score === highScore ? '🏆 최고 기록 갱신!' : `최고 기록: ${highScore}`;
+  document.getElementById('oOver').style.display = 'flex';
+
+  updateHUD();
+  idleLoop();
+}
+
+function goMain() {
+  gameRunning = false;
+  document.getElementById('oOver').style.display  = 'none';
+  document.getElementById('oShop').style.display  = 'none';
+  document.getElementById('oStart').style.display = 'flex';
+  buildCharGrid();
+  idleLoop();
+}
+
+// ══════════════════════════════════════════════
+//  모드 전환
+// ══════════════════════════════════════════════
+function pickMode(m) {
+  autoMode = (m === 'auto');
+  document.getElementById('btnManual').classList.toggle('sel', !autoMode);
+  document.getElementById('btnAuto').classList.toggle('sel', autoMode);
+  updateModeBtn();
+}
+
+function toggleMode() {
+  autoMode = !autoMode;
+  updateModeBtn();
+}
+
+function updateModeBtn() {
+  document.getElementById('modeToggle').textContent =
+    autoMode ? '🤖 자동 모드 ON' : '🎮 수동 모드 ON';
+}
+
+// ══════════════════════════════════════════════
+//  상점
+// ══════════════════════════════════════════════
+function openShop() {
+  document.getElementById('oOver').style.display = 'none';
+  document.getElementById('oShop').style.display = 'flex';
+  buildShop();
+}
+
+function closeShop() {
+  document.getElementById('oShop').style.display = 'none';
+  document.getElementById('oOver').style.display = 'flex';
+}
+
+function buildShop() {
+  document.getElementById('shopInfo').textContent = `보유 코인: ${totalCoins} 개`;
+  const grid = document.getElementById('shopGrid');
+  grid.innerHTML = '';
+
+  SKINS.forEach(skin => {
+    const div = document.createElement('div');
+    const owned   = ownedSkins.includes(skin.id);
+    const active  = equippedSkin === skin.id;
+    div.className = 'shop-card' + (owned ? ' owned' : '') + (active ? ' active' : '');
+
+    // 미리보기 캔버스
+    const pc = document.createElement('canvas');
+    pc.width = 56; pc.height = 75;
+    const pcx = pc.getContext('2d');
+    const previewColors = skin.rainbow
+      ? { ...CHARS[charIdx], hat:'#f0f', body:'#0ff', pants:'#ff0' }
+      : skin.over ? { ...CHARS[charIdx], ...skin.over } : { ...CHARS[charIdx] };
+    drawChar(pcx, 28, 72, previewColors, CHARS[charIdx], 0.85);
+    div.appendChild(pc);
+
+    const nm = document.createElement('p');
+    nm.textContent = skin.name;
+    div.appendChild(nm);
+
+    const pr = document.createElement('p');
+    pr.className = 'price';
+    if (active)       pr.textContent = '✅ 착용 중';
+    else if (owned)   pr.textContent = '착용하기';
+    else              pr.textContent = `💰 ${skin.price}코인`;
+    div.appendChild(pr);
+
+    div.onclick = () => {
+      if (!owned) {
+        if (totalCoins >= skin.price) {
+          totalCoins -= skin.price;
+          ownedSkins.push(skin.id);
+          equippedSkin = skin.id;
+          buildShop(); updateHUD();
+        } else {
+          alert(`코인이 부족해요! (필요: ${skin.price}, 보유: ${totalCoins})`);
+        }
+      } else {
+        equippedSkin = skin.id;
+        buildShop();
+      }
+    };
+    grid.appendChild(div);
+  });
+}
+
+// ══════════════════════════════════════════════
+//  캐릭터 선택 화면 구성
+// ══════════════════════════════════════════════
+function buildCharGrid() {
+  const grid = document.getElementById('charGrid');
+  grid.innerHTML = '';
+  CHARS.forEach((ch, i) => {
+    const div = document.createElement('div');
+    div.className = 'char-card' + (i === charIdx ? ' on' : '');
+
+    const pc = document.createElement('canvas');
+    pc.width = 54; pc.height = 75;
+    const pcx = pc.getContext('2d');
+    drawChar(pcx, 27, 72, ch, ch, 0.85);
+    div.appendChild(pc);
+
+    const nm = document.createElement('p');
+    nm.textContent = ch.name;
+    div.appendChild(nm);
+
+    div.onclick = () => {
+      charIdx = i;
+      document.querySelectorAll('.char-card').forEach((el, j) => {
+        el.classList.toggle('on', j === i);
+      });
+    };
+    grid.appendChild(div);
+  });
+}
+
+// ══════════════════════════════════════════════
+//  초기 실행
+// ══════════════════════════════════════════════
+pickMode('auto');    // 기본: 자동 모드
+buildCharGrid();
+updateHUD();
+idleLoop();          // 시작 전 대기 애니메이션
+</script>
+</body>
+</html>
