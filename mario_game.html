@@ -987,8 +987,55 @@ function drawCoin(c) {
     ctx.fillStyle='#fff';ctx.font='bold 9px Courier New';ctx.fillText('×'+pup.coin.mult,c.x-4,c.y-12);
   }
 }
+function drawCrab(o) {
+  const cx=o.x+14, cy=o.y+o.h;
+  // 집게발 (양쪽)
+  ctx.strokeStyle='#c03010';ctx.lineWidth=3;
+  // 왼쪽 팔
+  ctx.beginPath();ctx.moveTo(cx-14,cy-12);ctx.lineTo(cx-24,cy-20);ctx.stroke();
+  ctx.fillStyle='#e04020';
+  ctx.beginPath();ctx.ellipse(cx-27,cy-22,6,4,0.4,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(cx-23,cy-26,5,3,-0.3,0,Math.PI*2);ctx.fill();
+  // 오른쪽 팔
+  ctx.strokeStyle='#c03010';
+  ctx.beginPath();ctx.moveTo(cx+14,cy-12);ctx.lineTo(cx+24,cy-20);ctx.stroke();
+  ctx.fillStyle='#e04020';
+  ctx.beginPath();ctx.ellipse(cx+27,cy-22,6,4,-0.4,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(cx+23,cy-26,5,3,0.3,0,Math.PI*2);ctx.fill();
+  // 다리 (양쪽 3개씩)
+  ctx.strokeStyle='#c03010';ctx.lineWidth=2;
+  [-1,0,1].forEach(k=>{
+    ctx.beginPath();ctx.moveTo(cx-10,cy-8);ctx.lineTo(cx-20+k*4,cy+2+k*2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+10,cy-8);ctx.lineTo(cx+20-k*4,cy+2+k*2);ctx.stroke();
+  });
+  // 몸통 (둥근 사다리꼴)
+  ctx.fillStyle='#e04020';
+  ctx.beginPath();
+  ctx.moveTo(cx-16,cy-6); ctx.lineTo(cx+16,cy-6);
+  ctx.lineTo(cx+13,cy-22); ctx.lineTo(cx-13,cy-22);
+  ctx.closePath();ctx.fill();
+  // 딱딱한 등껍질 무늬
+  ctx.strokeStyle='#c03010';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.ellipse(cx,cy-14,10,7,0,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx,cy-22);ctx.lineTo(cx,cy-6);ctx.stroke();
+  // 눈 (긴 눈자루)
+  ctx.fillStyle='#c03010';
+  ctx.fillRect(cx-7,cy-26,3,6); ctx.fillRect(cx+4,cy-26,3,6);
+  ctx.fillStyle='#111';
+  ctx.beginPath();ctx.arc(cx-5,cy-27,3,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(cx+6,cy-27,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.arc(cx-4,cy-28,1,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(cx+7,cy-28,1,0,Math.PI*2);ctx.fill();
+  // 입 (거품)
+  ctx.fillStyle='rgba(255,255,255,0.7)';
+  ctx.beginPath();ctx.arc(cx-2,cy-8,2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(cx+3,cy-7,1.5,0,Math.PI*2);ctx.fill();
+}
+
 function drawObs(o) {
   if (o.type==='mole') {
+    if (worldMode==='beach') { drawCrab(o); return; }
     const mx=o.x+14,my=o.y+o.h;
     ctx.fillStyle='#654';ctx.beginPath();ctx.arc(mx,my-16,14,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='#987';ctx.beginPath();ctx.ellipse(mx,my-10,8,5,0,0,Math.PI);ctx.fill();
